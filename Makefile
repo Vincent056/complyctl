@@ -16,6 +16,10 @@ MAN_OPENSCAP_PLUGIN = docs/man/complyctl-openscap-plugin.md
 MAN_OPENSCAP_PLUGIN_OUTPUT = docs/man/complyctl-openscap-plugin.7
 MAN_OPENSCAP_CONF = docs/man/c2p-openscap-manifest.md
 MAN_OPENSCAP_CONF_OUTPUT = docs/man/c2p-openscap-manifest.5
+MAN_CELSCANNER_PLUGIN = docs/man/complyctl-celscanner-plugin.md
+MAN_CELSCANNER_PLUGIN_OUTPUT = docs/man/complyctl-celscanner-plugin.7
+MAN_CELSCANNER_CONF = docs/man/c2p-celscanner-manifest.md
+MAN_CELSCANNER_CONF_OUTPUT = docs/man/c2p-celscanner-manifest.5
 
 ##@ Compilation
 
@@ -29,10 +33,12 @@ build: prep-build-dir ## compile
 ##@ Packaging
 
 man: ## generate man pages
-	mkdir -p $(dir $(MAN_COMPLYCTL_OUTPUT)) $(dir $(MAN_OPENSCAP_PLUGIN_OUTPUT)) $(dir $(MAN_OPENSCAP_CONF_OUTPUT))
+	mkdir -p $(dir $(MAN_COMPLYCTL_OUTPUT)) $(dir $(MAN_OPENSCAP_PLUGIN_OUTPUT)) $(dir $(MAN_OPENSCAP_CONF_OUTPUT)) $(dir $(MAN_CELSCANNER_PLUGIN_OUTPUT)) $(dir $(MAN_CELSCANNER_CONF_OUTPUT))
 	pandoc -s -t man $(MAN_COMPLYCTL) -o $(MAN_COMPLYCTL_OUTPUT)
 	pandoc -s -t man $(MAN_OPENSCAP_PLUGIN) -o $(MAN_OPENSCAP_PLUGIN_OUTPUT)
 	pandoc -s -t man $(MAN_OPENSCAP_CONF) -o $(MAN_OPENSCAP_CONF_OUTPUT)
+	pandoc -s -t man $(MAN_CELSCANNER_PLUGIN) -o $(MAN_CELSCANNER_PLUGIN_OUTPUT)
+	pandoc -s -t man $(MAN_CELSCANNER_CONF) -o $(MAN_CELSCANNER_CONF_OUTPUT)
 
 ##@ Environment
 
@@ -55,7 +61,7 @@ vendor: ## go mod sync
 
 clean:
 	@rm -rf ./$(GO_BUILD_BINDIR)/*
-	rm -f $(MAN_COMPLYCTL_OUTPUT) $(MAN_OPENSCAP_PLUGIN_OUTPUT) $(MAN_OPENSCAP_CONF_OUTPUT)
+	rm -f $(MAN_COMPLYCTL_OUTPUT) $(MAN_OPENSCAP_PLUGIN_OUTPUT) $(MAN_OPENSCAP_CONF_OUTPUT) $(MAN_CELSCANNER_PLUGIN_OUTPUT) $(MAN_CELSCANNER_CONF_OUTPUT)
 .PHONY: clean
 
 ##@ Testing
