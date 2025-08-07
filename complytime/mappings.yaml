@@ -1,0 +1,35 @@
+# CELScanner Plugin Mapping Configuration
+# Maps OSCAL RuleSets and Checks to CEL Rules
+
+version: "1.0"
+
+# Mapping from RuleSet/Check IDs to CEL Rule IDs
+mappings:
+  # Pod security context check - CIS 1.1.1
+  pod-security-context:
+    type: stored_rules
+    rule_ids:
+      - pod-security-context
+      
+  # Namespace network policy compliance - CIS 4.3.2
+  namespace-network-policy-compliance:
+    type: stored_rules
+    rule_ids:
+      - namespace-network-policy-compliance
+      
+  # Kubeconfig file permissions - CKS 1.1.13
+  kubeconfig-file-permissions:
+    type: stored_rules
+    rule_ids:
+      - kubeconfig-file-permissions
+
+# Severity mappings for different check types
+severity_mappings:
+  security: HIGH
+  compliance: CRITICAL
+  network-security: HIGH
+  pod-security: HIGH
+  file-security: CRITICAL
+  performance: MEDIUM
+  availability: HIGH
+  governance: LOW

@@ -32,6 +32,7 @@ cp docs/samples/sample-profile.json docs/samples/sample-catalog.json ~/.local/sh
 
 Each plugin requires a plugin manifest. For more information about plugin discovery see [PLUGIN_GUIDE.md](PLUGIN_GUIDE.md).
 
+
 ```bash
 plugin_dir="$HOME/.local/share/complytime/plugins"
 cp "bin/openscap-plugin" "docs/samples/c2p-openscap-manifest.json" "$plugin_dir"

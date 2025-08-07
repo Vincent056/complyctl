@@ -1,0 +1,263 @@
+{
+  "component-definition": {
+    "uuid": "12dad575-309d-47fc-8bcf-54b180521f97",
+    "metadata": {
+      "title": "Component definition for fedora",
+      "last-modified": "2025-07-17T09:43:52.009247+08:00",
+      "version": "1.1",
+      "oscal-version": "1.1.3"
+    },
+    "components": [
+      {
+        "uuid": "a3758f21-078a-4d68-9a23-7af8f5bcf232",
+        "type": "service",
+        "title": "fedora",
+        "description": "Fedora",
+        "props": [
+          {
+            "name": "Rule_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "pod-security-context",
+            "remarks": "rule_set_001"
+          },
+          {
+            "name": "Check_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "pod-security-context",
+            "remarks": "rule_set_001"
+          },
+          {
+            "name": "Rule_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "namespace-network-policy-compliance",
+            "remarks": "rule_set_002"
+          },
+          {
+            "name": "Check_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "namespace-network-policy-compliance",
+            "remarks": "rule_set_002"
+          },
+          {
+            "name": "Rule_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "kubeconfig-file-permissions",
+            "remarks": "rule_set_003"
+          },
+          {
+            "name": "Check_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "kubeconfig-file-permissions",
+            "remarks": "rule_set_003"
+          }
+        ],
+        "control-implementations": [
+          {
+            "uuid": "a8310058-7621-47b6-b596-b392394d999e",
+            "source": "trestle://controls/sample-profile.json",
+            "description": "REPLACE_ME",
+            "props": [
+              {
+                "name": "Framework_Short_Name",
+                "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal",
+                "value": "ocp4-cis"
+              }
+            ],
+            "set-parameters": [
+              {
+                "param-id": "sshd_idle_timeout_value",
+                "values": [
+                  "15_minutes"
+                ]
+              }
+            ],
+            "implemented-requirements": [
+              {
+                "uuid": "5f3dbd43-69e7-4f2f-a4f3-e79f20b2f22f",
+                "control-id": "cis-1.1.1",
+                "description": "REPLACE_ME",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "implemented",
+                    "remarks": "REPLACE_ME"
+                  },
+                  {
+                    "name": "Rule_Id",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "pod-security-context",
+                    "remarks": "rule_set_001"
+                  }
+                ]
+              },
+              {
+                "uuid": "6a7e8f9d-b2c3-4d5e-af1b-2c3d4e5f6a7b",
+                "control-id": "cis-4.3.2",
+                "description": "REPLACE_ME",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "implemented",
+                    "remarks": "REPLACE_ME"
+                  },
+                  {
+                    "name": "Rule_Id",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "namespace-network-policy-compliance",
+                    "remarks": "rule_set_002"
+                  }
+                ]
+              },
+              {
+                "uuid": "8c9d0e1f-c3d4-5e6f-b7a8-9d0e1f2c3d4e",
+                "control-id": "cis-1.1.13",
+                "description": "REPLACE_ME",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "implemented",
+                    "remarks": "REPLACE_ME"
+                  },
+                  {
+                    "name": "Rule_Id",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "kubeconfig-file-permissions",
+                    "remarks": "rule_set_003"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "uuid": "0f462b2d-1712-45f4-be9c-06f1faab94a5",
+        "type": "validation",
+        "title": "celscanner",
+        "description": "celscanner",
+        "props": [
+          {
+            "name": "Rule_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "pod-security-context",
+            "remarks": "rule_set_000"
+          },
+          {
+            "name": "Check_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "pod-security-context",
+            "remarks": "rule_set_000"
+          },
+          {
+            "name": "Rule_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "namespace-network-policy-compliance",
+            "remarks": "rule_set_002"
+          },
+          {
+            "name": "Check_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "namespace-network-policy-compliance",
+            "remarks": "rule_set_002"
+          },
+          {
+            "name": "Rule_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "kubeconfig-file-permissions",
+            "remarks": "rule_set_003"
+          },
+          {
+            "name": "Check_Id",
+            "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+            "value": "kubeconfig-file-permissions",
+            "remarks": "rule_set_003"
+          }
+        ],
+        "control-implementations": [
+          {
+            "uuid": "0f917a6e-b0f4-42d2-9172-4cee250d1a26",
+            "source": "trestle://controls/sample-profile.json",
+            "description": "REPLACE_ME",
+            "props": [
+              {
+                "name": "Framework_Short_Name",
+                "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal",
+                "value": "ocp4-cis"
+              }
+            ],
+            "set-parameters": [
+              {
+                "param-id": "sshd_idle_timeout_value",
+                "values": [
+                  "15_minutes"
+                ]
+              }
+            ],
+            "implemented-requirements": [
+              {
+                "uuid": "b053f11f-c05c-4be3-896f-e9349b7fb0cb",
+                "control-id": "cis-1.1.1",
+                "description": "REPLACE_ME",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "alternative",
+                    "remarks": "REPLACE_ME"
+                  },
+                  {
+                    "name": "Rule_Id",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "pod-security-context",
+                    "remarks": "rule_set_001"
+                  }
+                ]
+              },
+              {
+                "uuid": "c3d4e5f6-a7b8-4c9d-be0f-1a2b3c4d5e6f",
+                "control-id": "cis-4.3.2",
+                "description": "REPLACE_ME",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "alternative",
+                    "remarks": "REPLACE_ME"
+                  },
+                  {
+                    "name": "Rule_Id",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "namespace-network-policy-compliance",
+                    "remarks": "rule_set_002"
+                  }
+                ]
+              },
+              {
+                "uuid": "b2ab9ea4-b067-4ede-bc4d-48aef290b0aa",
+                "control-id": "cis-1.1.13",
+                "description": "REPLACE_ME",
+                "props": [
+                  {
+                    "name": "implementation-status",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "alternative",
+                    "remarks": "REPLACE_ME"
+                  },
+                  {
+                    "name": "Rule_Id",
+                    "ns": "https://oscal-compass.github.io/compliance-trestle/schemas/oscal/cd",
+                    "value": "kubeconfig-file-permissions",
+                    "remarks": "rule_set_003"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

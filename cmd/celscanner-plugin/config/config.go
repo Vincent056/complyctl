@@ -24,7 +24,6 @@ type Config struct {
 	Files struct {
 		Workspace   string `config:"workspace"`
 		MappingFile string `config:"mapping_file"`
-		RulesFile   string `config:"rules_file"`
 		ResultsFile string `config:"results_file"`
 	}
 
@@ -148,10 +147,6 @@ func (c *Config) validate() error {
 	}
 
 	// Set default file paths if not specified
-	if c.Files.RulesFile == "" {
-		c.Files.RulesFile = filepath.Join(c.Files.Workspace, PluginDir, PolicyDir, "cel-rules.yaml")
-	}
-
 	if c.Files.ResultsFile == "" {
 		c.Files.ResultsFile = filepath.Join(c.Files.Workspace, PluginDir, ResultsDir, "cel-results.yaml")
 	}

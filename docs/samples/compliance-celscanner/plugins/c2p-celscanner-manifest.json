@@ -1,0 +1,59 @@
+{
+  "metadata": {
+    "id": "celscanner",
+    "description": "CELScanner Plugin for ComplyTime",
+    "version": "0.0.1",
+    "types": [
+      "pvp"
+    ]
+  },
+  "executablePath": "celscanner-plugin",
+  "sha256": "REPLACE_ME_SHA256",
+  "configuration": [
+    {
+      "name": "workspace",
+      "description": "Directory for writing plugin artifacts",
+      "default": "/home/vincent/ws-compliance/complyctl/complytime"
+    },
+    {
+      "name": "mapping_file",
+      "description": "The mapping file to use for assessment",
+      "default": "mappings.yaml"
+    },
+    {
+      "name": "results_file",
+      "description": "The results file to use for assessment",
+      "default": "cel-results.json"
+    },
+    {
+      "name": "target_name",
+      "description": "The name of the target to use for assessment",
+      "default": "production-k8s-cluster"
+    },
+    {
+      "name": "target_type",
+      "description": "The type of the target to use for assessment",
+      "default": "kubernetes-cluster"
+    },
+    {
+      "name": "target_id",
+      "description": "The id of the target to use for assessment",
+      "default": "cluster-prod-001"
+    },
+    {
+      "name": "enable_kubernetes",
+      "description": "Enable Kubernetes resource scanning",
+      "default": "true"
+    },
+    {
+      "name": "enable_filesystem",
+      "description": "Enable filesystem resource scanning",
+      "default": "true"
+    },
+    {
+      "name": "enable_http",
+      "description": "Enable HTTP resource scanning",
+      "default": "false"
+    }
+  ]
+}

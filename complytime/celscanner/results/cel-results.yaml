@@ -1,0 +1,50 @@
+observationsbycheck:
+    - title: pod-security-context
+      description: CEL check result for pod-security-context
+      checkid: pod-security-context
+      methods:
+        - AUTOMATED
+      subjects:
+        - title: production-k8s-cluster
+          type: resource
+          resourceid: cluster-prod-001
+          result: 1
+          evaluatedon: 2025-08-07T01:16:43.615975848-07:00
+          reason: ""
+          props: []
+      collected: 2025-08-07T01:16:43.615975327-07:00
+      relevantevidences: []
+      props: []
+    - title: namespace-network-policy-compliance
+      description: CEL check result for namespace-network-policy-compliance
+      checkid: namespace-network-policy-compliance
+      methods:
+        - AUTOMATED
+      subjects:
+        - title: production-k8s-cluster
+          type: resource
+          resourceid: cluster-prod-001
+          result: 1
+          evaluatedon: 2025-08-07T01:16:43.615976409-07:00
+          reason: ""
+          props: []
+      collected: 2025-08-07T01:16:43.615976308-07:00
+      relevantevidences: []
+      props: []
+    - title: kubeconfig-file-permissions
+      description: CEL check result for kubeconfig-file-permissions
+      checkid: kubeconfig-file-permissions
+      methods:
+        - AUTOMATED
+      subjects:
+        - title: production-k8s-cluster
+          type: resource
+          resourceid: cluster-prod-001
+          result: 3
+          evaluatedon: 2025-08-07T01:16:43.61597693-07:00
+          reason: ""
+          props: []
+      collected: 2025-08-07T01:16:43.615976839-07:00
+      relevantevidences: []
+      props: []
+links: []

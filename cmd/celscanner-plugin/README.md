@@ -1,8 +1,8 @@
-# compliance-sdk Plugin for Complyctl
+# CELScanner Plugin for Complyctl
 
 ## Overview
 
-The **compliance-sdk-plugin** extends complyctl's capabilities to use compliance-sdk go module for compliance validation. This plugin integrates with the CEL Go Scanner and optionally with the CEL RPC Server to provide flexible, policy-as-code compliance checking.
+The **celscanner-plugin** extends complyctl's capabilities to use CEL (Common Expression Language) for compliance validation. This plugin integrates with the CEL Go Scanner library and optionally with the CEL RPC Server to provide flexible, policy-as-code compliance checking using the OSCAL (Open Security Controls Assessment Language) framework.
 
 ## YAML-Based Rule Storage
 
@@ -16,22 +16,70 @@ The plugin includes a comprehensive YAML-based rule storage system that provides
 
 ### Rule Format Example
 ```yaml
-id: sshd-service-enabled
-name: SSH Daemon Service Enabled Check
-description: Ensures SSH daemon service is enabled to start at boot
-expression: 'service.success && contains(service.output, "enabled")'
+id: pod-security-context
+name: Pod Security Context Check
+description: Ensures pods have a security context defined with proper restrictions
+expression: 'pods.items.all(item, has(item.spec.securityContext) && has(item.spec.securityContext.runAsNonRoot) && item.spec.securityContext.runAsNonRoot == true)'
 inputs:
-  - name: service
-    type: system
-    command: systemctl
-    args: [is-enabled, sshd]
-tags: [security, compliance, ssh]
-category: system-services
+  - name: pods
+    kubernetes:
+      apiGroup: ""
+      version: v1
+      resourceType: pods
+      namespace: ""
+      name: ""
+tags: 
+  - security
+  - compliance
+  - pods
+category: pod-security
 severity: HIGH
 extensions:
   compliance_framework: CIS
-  control_id: "5.2.1"
-  remediation: "Run 'sudo systemctl enable sshd' to enable SSH service"
+  control_id: "1.1.1"
+  remediation: "Ensure all pods have security context with runAsNonRoot set to true"
+check_id: pod-security-context
+```
+
+### Additional Rule Examples
+
+#### File Permission Check
+```yaml
+id: kubeconfig-file-permissions
+name: Kubeconfig File Permissions Check
+description: Ensures the kubeconfig file has restrictive permissions (600)
+expression: |
+  has(kubeconfig.mode) && kubeconfig.mode == "-rw-------"
+inputs:
+  - name: kubeconfig
+    file:
+      path: /etc/kubernetes/kubeconfig
+      format: text
+      recursive: false
+      checkPermissions: true
+category: file-security
+severity: CRITICAL
+extensions:
+  compliance_framework: CIS
+  control_id: "1.1.13"
+```
+
+#### System Service Check
+```yaml
+id: sshd-service-running
+name: SSH Daemon Service Running Check
+description: Verifies SSH daemon service is currently active and running
+expression: 'service.success && contains(service.output, "active")'
+inputs:
+  - name: service
+    system:
+      command: systemctl
+      service: sshd
+      args:
+        - is-active
+        - sshd
+category: system-services
+severity: CRITICAL
 ```
 
 ### Rule Store API Usage
@@ -65,7 +113,7 @@ store.ImportRules("rules.yaml", false) // false = skip existing
 
 ### High-Level Architecture
 
-The Compliance SDK Plugin follows a modular architecture that seamlessly integrates with complyctl's plugin framework while providing flexible execution modes and input sources.
+The CELScanner Plugin follows a modular architecture that seamlessly integrates with complyctl's plugin framework while providing flexible execution modes and input sources.
 
 ```mermaid
 graph TB
@@ -75,10 +123,10 @@ graph TB
         AR["Assessment Results (OSCAL)"]
     end
     
-    subgraph "Compliance SDK Plugin"
+    subgraph "CELScanner Plugin"
         PS[Plugin Server]
         CF[Config Manager]
-        CG[CEL Rule Generator]
+        RS[Rule Store]
         CS[CEL Scanner]
         RM[Result Mapper]
     end
@@ -103,15 +151,14 @@ graph TB
     end
     
     CC -->|"Configure()"| PS
-    CC -->|"Generate()"| PS
     CC -->|"GetResults()"| PS
     
     PS --> CF
-    PS --> CG
+    PS --> RS
     PS --> CS
     PS --> RM
     
-    CG --> CS
+    RS --> CS
     CS --> LM
     CS --> RPM
     
@@ -127,7 +174,7 @@ graph TB
     HF -->|"HTTP requests"| API
     SF -->|"Check System Service.."| FS
     
-    AP -->|"Policy rules"| CG
+    AP -->|"Rule/Check IDs"| RS
     RM -->|"Observations"| AR
     
     style CC fill:#e1d5f5
@@ -145,14 +192,13 @@ The Plugin Server is the main entry point that implements the `policy.Provider` 
 
 - **Responsibilities**:
   - Handles gRPC communication with complyctl
-  - Orchestrates the conversion between OSCAL and CEL
+  - Maps OSCAL Rule/Check IDs to CEL rules via mappings
   - Manages execution modes (local vs RPC)
   - Coordinates all sub-components
 
 - **Key Methods**:
-  - `Configure()`: Initializes plugin settings and connections
-  - `Generate()`: Transforms OSCAL rules to CEL expressions
-  - `GetResults()`: Executes scans and returns compliance results
+  - `Configure()`: Initializes plugin settings, loads mappings and rule store
+  - `GetResults()`: Loads CEL rules from store, executes scans, and returns compliance results
 
 #### 2. **Config Manager**
 Manages all plugin configuration:
@@ -164,19 +210,20 @@ Manages all plugin configuration:
   - **Features**: Enable/disable various input sources
   - **Scanner**: Debug settings, resource filters
 
-#### 3. **CEL Rule Generator**
-Converts OSCAL compliance rules to CEL expressions:
+#### 3. **Rule Store**
+Manages YAML-based CEL rule storage and retrieval:
 
-- **Mapping Process**:
-  1. Parses OSCAL rule definitions
-  2. Maps checks to CEL expressions via configuration
-  3. Preserves metadata as CEL rule extensions
-  4. Handles parameters and variable substitution
+- **Responsibilities**:
+  1. Loads CEL rules from YAML files in the rules directory
+  2. Converts stored rules to CEL scanner format
+  3. Handles input unmarshaling from YAML to proper types
+  4. Maps OSCAL Rule/Check IDs to stored CEL rules
 
-- **Mapping Sources**:
-  - Built-in mappings for common checks
-  - Custom mapping files (JSON format)
-  - Future: AI-generated mappings
+- **Key Features**:
+  - Individual YAML files per rule for version control
+  - Support for Kubernetes, file, system, and HTTP inputs
+  - Flexible mapping configuration (stored rules or inline)
+  - Automatic type conversion for different input types
 
 #### 4. **CEL Scanner**
 Executes CEL expressions against targets:
@@ -213,12 +260,12 @@ Transforms CEL evaluation results to OSCAL format:
 
 1. **Configuration Flow**:
    ```
-   Manifest → Configure() → Config Manager → All Components
+   Manifest → Configure() → Config Manager → Load Mappings → Load Rule Store
    ```
 
-2. **Generation Flow**:
+2. **Rule Loading Flow**:
    ```
-   OSCAL Assessment Plan → Generate() → Rule Generator → CEL Rules → Storage
+   OSCAL Assessment Plan → Extract Rule/Check IDs → Mapping File → Rule Store → CEL Rules
    ```
 
 3. **Execution Flow**:
@@ -291,25 +338,24 @@ sequenceDiagram
     participant C as Complyctl
     participant P as Plugin Server
     participant CM as Config Manager
-    participant RG as Rule Generator
+    participant RS as Rule Store
+    participant M as Mappings
     participant S as Scanner
     participant RM as Result Mapper
     participant T as Target System
 
     C->>P: Configure(config)
     P->>CM: LoadSettings()
-    CM-->>P: Configuration loaded
+    P->>M: Load mappings.yaml
+    P->>RS: Load rules from YAML
+    RS-->>P: Rules loaded
     P-->>C: Success
 
-    C->>P: Generate(OSCAL Policy)
-    P->>RG: Convert to CEL
-    RG->>RG: Map checks to expressions
-    RG-->>P: CEL Rules
-    P->>P: Save rules to workspace
-    P-->>C: Success
-
-    C->>P: GetResults(Policy)
-    P->>P: Load CEL rules
+    C->>P: GetResults(OSCAL Policy)
+    P->>M: Map Rule/Check IDs
+    M-->>P: CEL Rule IDs
+    P->>RS: Get CEL Rules
+    RS-->>P: CEL Rules
     P->>S: Create scanner
     S->>T: Fetch data
     T-->>S: Resource data
@@ -323,7 +369,7 @@ sequenceDiagram
 ### Directory Structure
 
 ```
-compliance-sdk-plugin/
+celscanner-plugin/
 ├── main.go                    # Plugin entry point
 ├── go.mod                     # Go module definition
 ├── Makefile                   # Build and test automation
@@ -331,35 +377,43 @@ compliance-sdk-plugin/
 │
 ├── server/                    # Plugin server implementation
 │   ├── server.go             # Core plugin logic
-│   └── server_test.go        # Unit tests
+│   ├── server_test.go        # Unit tests
+│   ├── rulestore.go          # YAML rule storage
+│   └── rulestore_test.go     # Rule store tests
 │
-├── config/                    # Configuration management
-│   ├── config.go             # Config structures and validation
-│   └── config_test.go        # Config tests
-│
-├── mapper/                    # OSCAL-CEL mapping (future)
-│   ├── mapper.go             # Mapping logic
-│   └── mappings/             # Mapping definitions
-│
-├── examples/                  # Example configurations
-│   ├── manifest.yaml         # Sample manifest
-│   ├── mappings.json         # Sample mappings
-│   └── rules/                # Sample CEL rules
+├── docs/                      # Documentation
+│   ├── mapping-system.md     # Mapping system details
+│   ├── kubeconfig-handling.md # Kubeconfig documentation
+│   └── yaml-rule-storage.md  # Rule storage details
 │
 └── test/                      # Integration tests
     ├── integration_test.go   # Full workflow tests
     └── fixtures/             # Test data
 ```
 
+**Workspace Structure** (created at runtime):
+```
+workspace/
+├── mappings.yaml             # Rule ID to CEL rule mappings
+├── rules/                    # CEL rules in YAML format
+│   ├── pod-security-context.yaml
+│   ├── network-policy-compliance.yaml
+│   └── kubeconfig-permissions.yaml
+└── celscanner/
+    ├── policy/              # Generated policy files
+    └── results/             # Scan results
+        └── cel-results.yaml
+```
+
 ### Deployment Architecture
 
-The Compliance SDK Plugin supports multiple deployment scenarios:
+The CELScanner Plugin supports multiple deployment scenarios:
 
 #### 1. **Standalone Deployment**
 ```
-┌─────────────┐     ┌───────────────────────┐
-│  Complyctl  │────▶│ Compliance-SDK Plugin │
-└─────────────┘     └───────────────────────┘
+┌─────────────┐     ┌───────────────────┐
+│  Complyctl  │────▶│ CELScanner Plugin │
+└─────────────┘     └───────────────────┘
                              │
                     ┌────────┴────────┐
                     ▼                 ▼
@@ -502,27 +556,28 @@ plugin:
 
 ## How It Works
 
-### 1. Generate Phase
+### 1. Configuration Phase
 
-When complyctl calls `Generate()`:
+When complyctl calls `Configure()`:
 
-1. The plugin receives OSCAL rules from the assessment plan
-2. Each OSCAL rule is converted to a CEL expression:
-   - Rule metadata is preserved as extensions
-   - Parameters are embedded in the CEL context
-   - Checks are mapped to CEL expressions via configuration
-3. CEL rules are saved to the workspace for execution
+1. The plugin loads configuration settings
+2. Loads the mapping file (e.g., `mappings.yaml`) 
+3. Initializes the rule store from the `rules/` directory
+4. Sets up Kubernetes clients if enabled
+5. Configures RPC client if using CEL Server mode
 
 ### 2. Scan Phase
 
 When complyctl calls `GetResults()`:
 
-1. The plugin loads the generated CEL rules
-2. Creates a scanner based on configuration:
+1. The plugin extracts Rule/Check IDs from the OSCAL assessment plan
+2. Maps these IDs to CEL rules using the mapping configuration
+3. Retrieves the corresponding CEL rules from the rule store
+4. Creates a scanner based on configuration:
    - Local scanner with appropriate fetchers
    - Or RPC client connection
-3. Executes all CEL rules against the target
-4. Converts results to OSCAL observations
+5. Executes all CEL rules against the target
+6. Converts results to OSCAL observations
 
 ### 3. Result Mapping
 
@@ -549,25 +604,48 @@ When using the CEL RPC Server mode:
 ## Example Workflow
 
 ```bash
-# 1. Configure the plugin in your manifest
+# 1. Create CEL rules in YAML format
+cat > workspace/rules/pod-security-context.yaml <<EOF
+id: pod-security-context
+name: Pod Security Context Check
+expression: 'pods.items.all(item, has(item.spec.securityContext))'
+inputs:
+  - name: pods
+    kubernetes:
+      apiGroup: ""
+      version: v1
+      resourceType: pods
+severity: HIGH
+check_id: pod-security-context
+EOF
+
+# 2. Create mapping configuration
+cat > workspace/mappings.yaml <<EOF
+version: "1.0"
+mappings:
+  pod-security-context:
+    type: stored_rules
+    rule_ids:
+      - pod-security-context
+EOF
+
+# 3. Configure the plugin in your manifest
 cat > manifest.yaml <<EOF
 assessment-plan: assessment-plan.json
 plugins:
-  - name: compliance-sdk-plugin
+  - name: celscanner-plugin
     config:
-      workspace: /tmp/compliance
+      workspace: ./workspace
       enable_kubernetes: true
       target_name: production-cluster
+      mapping_file: mappings.yaml
 EOF
 
-# 2. Generate CEL rules from OSCAL
-complyctl generate -m manifest.yaml
-
-# 3. Run compliance scan
+# 4. Run compliance scan
 complyctl scan -m manifest.yaml
 
-# 4. View results
-complyctl report -m manifest.yaml
+# 5. View results
+cat workspace/celscanner/results/cel-results.yaml
 ```
 
 ## System Service Status Checks
@@ -578,23 +656,36 @@ For security reasons, system command execution is limited to service status chec
 - **Service Enabled**: Check if a service is enabled (`systemctl is-enabled <service>`)
 - **SELinux Status**: Check SELinux enforcement mode (`getenforce`)
 
-Example system service mappings:
+Example system service rules:
 ```yaml
-sshd-service-enabled:
-  expression: "service.output.contains('enabled')"
-  description: "SSH daemon service should be enabled"
-  inputs:
-    - name: service
-      type: system
-      command: "systemctl is-enabled sshd"
+id: sshd-service-enabled
+name: SSH Service Enabled Check
+description: Ensures SSH daemon service is enabled
+expression: 'service.success && contains(service.output, "enabled")'
+inputs:
+  - name: service
+    system:
+      command: systemctl
+      args:
+        - is-enabled
+        - sshd
+severity: HIGH
+check_id: sshd-service-enabled
 
-firewalld-running:
-  expression: "service.output.contains('active')"
-  description: "Firewalld should be running"
-  inputs:
-    - name: service
-      type: system
-      command: "systemctl is-active firewalld"
+---
+id: firewalld-running
+name: Firewalld Running Check  
+description: Ensures firewalld service is active
+expression: 'service.success && contains(service.output, "active")'
+inputs:
+  - name: service
+    system:
+      command: systemctl
+      args:
+        - is-active
+        - firewalld
+severity: CRITICAL
+check_id: firewalld-running
 ```
 
 ### Security Considerations
@@ -606,11 +697,11 @@ firewalld-running:
 
 ### Implementation Details
 
-The plugin follows the cel-go-scanner pattern for system inputs:
-- Service status checks use: `WithSystemInput(name, "", "systemctl", []string{"is-active", service})`
-- Service enabled checks use: `WithSystemInput(name, "", "systemctl", []string{"is-enabled", service})`
-- SELinux checks use: `WithSystemInput(name, "", "getenforce", []string{})`
-- Direct service checks use: `WithSystemInput(name, serviceName, "", []string{})`
+The plugin parses system inputs from YAML and creates the appropriate CEL scanner inputs:
+- Service status checks: `command: systemctl, args: [is-active, service-name]`
+- Service enabled checks: `command: systemctl, args: [is-enabled, service-name]`
+- SELinux checks: `command: getenforce, args: []`
+- Direct service checks: `service: service-name` (for built-in service checks)
 
 The expressions validate both command success and output content:
 ```cel
@@ -635,23 +726,29 @@ The plugin uses an advanced mapping system to convert OSCAL RuleSets to CEL rule
 # mappings.yaml
 version: "1.0"
 mappings:
-  # Map to stored rules
-  sshd-service:
+  # Map OSCAL Rule/Check ID to stored CEL rules
+  pod-security-context:
     type: stored_rules
     rule_ids:
-      - sshd-service-enabled
-      - sshd-service-running
+      - pod-security-context
+      
+  namespace-network-policy-compliance:
+    type: stored_rules
+    rule_ids:
+      - namespace-network-policy-compliance
   
-  # Map to inline rules
-  pod-security:
-    type: inline
-    rules:
-      - id: pod-security-context
-        expression: "has(resource.spec.securityContext)"
-        inputs:
-          - name: resource
-            type: kubernetes
-            resource: pods
+  kubeconfig-file-permissions:
+    type: stored_rules
+    rule_ids:
+      - kubeconfig-file-permissions
+
+# Severity mappings for different check types
+severity_mappings:
+  security: HIGH
+  compliance: CRITICAL
+  network-security: HIGH
+  pod-security: HIGH
+  file-security: CRITICAL
 ```
 
 See [Mapping System Documentation](docs/mapping-system.md) for detailed information.
@@ -661,8 +758,8 @@ See [Mapping System Documentation](docs/mapping-system.md) for detailed informat
 ### Building the Plugin
 
 ```bash
-cd compliance-sdk-plugin
-go build -o compliance-sdk-plugin
+cd cmd/celscanner-plugin
+go build -o celscanner-plugin
 ```
 
 ### Testing

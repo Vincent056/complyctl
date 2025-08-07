@@ -23,32 +23,120 @@ type RuleStore struct {
 
 // StoredRule represents a rule with metadata stored in YAML
 type StoredRule struct {
-	ID          string                 `yaml:"id"`
-	Name        string                 `yaml:"name"`
-	Description string                 `yaml:"description"`
-	Expression  string                 `yaml:"expression"`
-	Inputs      []RuleInputConfig      `yaml:"inputs"`
-	Tags        []string               `yaml:"tags"`
-	Category    string                 `yaml:"category"`
-	Severity    string                 `yaml:"severity"`
-	Extensions  map[string]interface{} `yaml:"extensions,omitempty"`
-	CreatedAt   time.Time              `yaml:"created_at"`
-	UpdatedAt   time.Time              `yaml:"updated_at"`
-	CreatedBy   string                 `yaml:"created_by"`
-	CheckID     string                 `yaml:"check_id,omitempty"`
+	ID          string                   `yaml:"id"`
+	Name        string                   `yaml:"name"`
+	Description string                   `yaml:"description"`
+	Expression  string                   `yaml:"expression"`
+	Inputs      []map[string]interface{} `yaml:"inputs"`
+	Tags        []string                 `yaml:"tags"`
+	Category    string                   `yaml:"category"`
+	Severity    string                   `yaml:"severity"`
+	Extensions  map[string]interface{}   `yaml:"extensions,omitempty"`
+	CreatedAt   time.Time                `yaml:"created_at"`
+	UpdatedAt   time.Time                `yaml:"updated_at"`
+	CreatedBy   string                   `yaml:"created_by"`
+	CheckID     string                   `yaml:"check_id,omitempty"`
 }
 
-// RuleInputConfig represents input configuration in YAML
-type RuleInputConfig struct {
-	Name     string            `yaml:"name"`
-	Type     string            `yaml:"type"`
-	Resource string            `yaml:"resource,omitempty"`
-	Path     string            `yaml:"path,omitempty"`
-	URL      string            `yaml:"url,omitempty"`
-	Command  string            `yaml:"command,omitempty"`
-	Args     []string          `yaml:"args,omitempty"`
-	Service  string            `yaml:"service,omitempty"`
-	Metadata map[string]string `yaml:"metadata,omitempty"`
+// GetCELInputs converts the stored inputs map to celscanner.Input interfaces
+func (r *StoredRule) GetCELInputs() ([]celscanner.Input, error) {
+	var inputs []celscanner.Input
+	for _, input := range r.Inputs {
+		hclog.Default().Debug("Input", "input", input)
+
+		// Parse the input based on its type
+		name, ok := input["name"].(string)
+		if !ok {
+			return nil, fmt.Errorf("input missing name field")
+		}
+
+		// Check for different input types
+		if kubeConfig, exists := input["kubernetes"]; exists {
+			if kubeMap, ok := kubeConfig.(map[string]interface{}); ok {
+				version, _ := kubeMap["version"].(string)
+				if version == "" {
+					version = "v1"
+				}
+
+				resourceType, _ := kubeMap["resourceType"].(string)
+				if resourceType == "" {
+					resourceType, _ = kubeMap["resource"].(string)
+				}
+
+				namespace, _ := kubeMap["namespace"].(string)
+				apiGroup, _ := kubeMap["apiGroup"].(string)
+				resourceName, _ := kubeMap["resourceName"].(string)
+
+				celInput := celscanner.NewKubernetesInput(name, apiGroup, version, resourceType, namespace, resourceName)
+				inputs = append(inputs, celInput)
+			}
+		} else if fileConfig, exists := input["file"]; exists {
+			if fileMap, ok := fileConfig.(map[string]interface{}); ok {
+				path, _ := fileMap["path"].(string)
+				format, _ := fileMap["format"].(string)
+				if format == "" {
+					format = "text"
+				}
+
+				recursive, _ := fileMap["recursive"].(bool)
+				checkPermissions, _ := fileMap["checkPermissions"].(bool)
+
+				celInput := celscanner.NewFileInput(name, path, format, recursive, checkPermissions)
+				inputs = append(inputs, celInput)
+			}
+		} else if systemConfig, exists := input["system"]; exists {
+			if systemMap, ok := systemConfig.(map[string]interface{}); ok {
+				command, _ := systemMap["command"].(string)
+				service, _ := systemMap["service"].(string)
+
+				var args []string
+				if argsInterface, exists := systemMap["args"]; exists {
+					if argsList, ok := argsInterface.([]interface{}); ok {
+						for _, arg := range argsList {
+							if argStr, ok := arg.(string); ok {
+								args = append(args, argStr)
+							}
+						}
+					}
+				}
+
+				celInput := celscanner.NewSystemInput(name, command, service, args)
+				inputs = append(inputs, celInput)
+			}
+		} else if httpConfig, exists := input["http"]; exists {
+			if httpMap, ok := httpConfig.(map[string]interface{}); ok {
+				url, _ := httpMap["url"].(string)
+				method, _ := httpMap["method"].(string)
+				if method == "" {
+					method = "GET"
+				}
+
+				var headers map[string]string
+				if headersInterface, exists := httpMap["headers"]; exists {
+					if headersMap, ok := headersInterface.(map[string]interface{}); ok {
+						headers = make(map[string]string)
+						for k, v := range headersMap {
+							if vStr, ok := v.(string); ok {
+								headers[k] = vStr
+							}
+						}
+					}
+				}
+				var body []byte
+				if bodyInterface, exists := httpMap["body"]; exists {
+					if bodyBytes, ok := bodyInterface.([]byte); ok {
+						body = bodyBytes
+					}
+				}
+
+				celInput := celscanner.NewHTTPInput(name, url, method, headers, body)
+				inputs = append(inputs, celInput)
+			}
+		} else {
+			return nil, fmt.Errorf("unknown input type for input: %s", name)
+		}
+	}
+	return inputs, nil
 }
 
 // NewRuleStore creates a new YAML-based rule store
@@ -87,6 +175,7 @@ func (s *RuleStore) loadRules() error {
 				hclog.Default().Error("Failed to read rule file", "file", filePath, "error", err)
 				continue
 			}
+			hclog.Default().Debug("rule", "data", string(data))
 
 			var rule StoredRule
 			if err := yaml.Unmarshal(data, &rule); err != nil {
@@ -95,7 +184,7 @@ func (s *RuleStore) loadRules() error {
 			}
 
 			s.rules[rule.ID] = &rule
-			hclog.Default().Debug("Loaded rule", "id", rule.ID, "name", rule.Name)
+			hclog.Default().Debug("Loaded rule", "id", rule.ID, "name", rule.Name, "expression", rule.Expression, "inputs", rule.Inputs)
 		}
 	}
 
@@ -227,6 +316,17 @@ func (s *RuleStore) ConvertToCelRule(stored *StoredRule) (celscanner.CelRule, er
 		WithDescription(stored.Description).
 		SetExpression(stored.Expression)
 
+	hclog.Default().Debug("Converting rule to CEL rule", "rule", stored)
+	// Convert and add inputs
+	celInputs, err := stored.GetCELInputs()
+	hclog.Default().Debug("CEL inputs", "inputs", celInputs)
+	if err != nil {
+		hclog.Default().Warn("Failed to convert inputs for rule", "id", stored.ID, "error", err)
+	}
+	for _, input := range celInputs {
+		hclog.Default().Debug("Adding input", "input", input)
+		builder.WithInput(input)
+	}
 	// Add tags as extension
 	if len(stored.Tags) > 0 {
 		builder.WithExtension("tags", stored.Tags)
@@ -239,30 +339,28 @@ func (s *RuleStore) ConvertToCelRule(stored *StoredRule) (celscanner.CelRule, er
 	if stored.Severity != "" {
 		builder.WithExtension("severity", stored.Severity)
 	}
+	if stored.CheckID != "" {
+		builder.WithExtension("check_id", stored.CheckID)
+	}
+	if stored.Category != "" {
+		builder.WithExtension("category", stored.Category)
+	}
+	if stored.Severity != "" {
+		builder.WithExtension("severity", stored.Severity)
+	}
+	if !stored.CreatedAt.IsZero() {
+		builder.WithExtension("created_at", stored.CreatedAt.Format(time.RFC3339))
+	}
+	if !stored.UpdatedAt.IsZero() {
+		builder.WithExtension("updated_at", stored.UpdatedAt.Format(time.RFC3339))
+	}
+	if stored.CreatedBy != "" {
+		builder.WithExtension("created_by", stored.CreatedBy)
+	}
 
 	// Add other extensions
 	for key, value := range stored.Extensions {
 		builder.WithExtension(key, value)
-	}
-
-	// Add inputs based on type
-	for _, input := range stored.Inputs {
-		switch strings.ToLower(input.Type) {
-		case "kubernetes":
-			builder.WithKubernetesInput(input.Name, "", "v1", input.Resource, "", "")
-		case "file":
-			builder.WithFileInput(input.Name, input.Path, ".", false, false)
-		case "http":
-			builder.WithHTTPInput(input.Name, input.URL, "GET", nil, nil)
-		case "system":
-			if input.Service != "" {
-				// Service-based check
-				builder.WithSystemInput(input.Name, input.Service, "", []string{})
-			} else if input.Command != "" {
-				// Command-based check
-				builder.WithSystemInput(input.Name, "", input.Command, input.Args)
-			}
-		}
 	}
 
 	return builder.Build()

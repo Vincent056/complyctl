@@ -1,6 +1,6 @@
 % C2P-CELSCANNER-MANIFEST.JSON(5) complyctl CELScanner Plugin Configuration
-% Vincent056 <vincent056@example.com>
-% December 2024
+% Vincent056 <wenshen@redhat.com>
+% Aug 2025
 
 # NAME
 
@@ -30,9 +30,10 @@ See complyctl(1) for more details about the available options.
 The configuration is typically part of the complyctl manifest with the following structure:
 
 ```yaml
+assessment-plan: assessment-plan.json
 plugins:
   - name: celscanner-plugin
-    path: /path/to/plugin  # Optional
+    path: /path/to/plugin  # Optional, defaults to system path
     config:
       # Configuration options here
 ```
@@ -67,9 +68,9 @@ Default: `"default"`
 Path to custom CEL expression mapping file (YAML format).
 Default: `"mappings.yaml"`
 
-**rules_file** (string)
-Filename for generated CEL rules.
-Default: `"cel-rules.yaml"`
+**rules_dir** (string)
+Path to directory containing CEL rule YAML files.
+Default: `"rules"`
 
 **results_file** (string)
 Filename for scan results.
@@ -233,23 +234,37 @@ The mapping file referenced by `mapping_file` option should be in YAML format:
 
 ```yaml
 version: "1.0"
+
+# Map OSCAL Rule/Check IDs to CEL rules
 mappings:
-  rule-id-1:
+  # Pod security context check - CIS 1.1.1
+  pod-security-context:
     type: stored_rules
     rule_ids:
-      - stored-rule-1
-      - stored-rule-2
-    description: "Maps to multiple stored rules"
-  
-  rule-id-2:
-    type: inline
-    rules:
-      - id: inline-check-1
-        expression: "resource.status == 'Running'"
-        inputs:
-          - name: resource
-            type: kubernetes
-            resource: pods
+      - pod-security-context
+      
+  # Namespace network policy compliance - CIS 4.3.2
+  namespace-network-policy-compliance:
+    type: stored_rules
+    rule_ids:
+      - namespace-network-policy-compliance
+      
+  # Kubeconfig file permissions - CIS 1.1.13
+  kubeconfig-file-permissions:
+    type: stored_rules
+    rule_ids:
+      - kubeconfig-file-permissions
+
+# Severity mappings for different check types
+severity_mappings:
+  security: HIGH
+  compliance: CRITICAL
+  network-security: HIGH
+  pod-security: HIGH
+  file-security: CRITICAL
+  performance: MEDIUM
+  availability: HIGH
+  governance: LOW
 ```
 
 # SEE ALSO
@@ -260,4 +275,4 @@ See https://github.com/complytime/complyctl for more detailed documentation.
 
 # COPYRIGHT
 
-© 2024 CELScanner Project. c2p-celscanner-manifest.json is released under the terms of the Apache-2.0 license.
+© 2025 CELScanner Project. c2p-celscanner-manifest.json is released under the terms of the Apache-2.0 license.

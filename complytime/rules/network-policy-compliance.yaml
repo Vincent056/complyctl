@@ -1,0 +1,37 @@
+id: namespace-network-policy-compliance
+name: Namespace Network Policy Compliance
+description: Ensures all user namespaces have associated network policies
+expression: |
+  namespaces.items.all(ns, 
+    !(ns.metadata.name.startsWith("openshift-") || ns.metadata.name.startsWith("kube-")) ?
+      networkpolicies.items.exists(np, 
+        np.metadata.namespace == ns.metadata.name
+      )
+    : true
+  )
+inputs:
+  - name: namespaces
+    kubernetes:
+      apiGroup: ""
+      version: v1
+      resourceType: namespaces
+      namespace: ""
+      name: ""
+  - name: networkpolicies
+    kubernetes:
+      apiGroup: networking.k8s.io
+      version: v1
+      resourceType: networkpolicies
+      namespace: ""
+      name: ""
+tags:
+  - security
+  - compliance
+  - network
+category: network-security
+severity: HIGH
+extensions:
+  compliance_framework: CIS
+  control_id: "4.3.2"
+  remediation: "Create NetworkPolicy resources for all user namespaces to control ingress and egress traffic"
+check_id: namespace-network-policy-compliance

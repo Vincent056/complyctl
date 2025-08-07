@@ -1,0 +1,23 @@
+id: pod-security-context
+name: Pod Security Context Check
+description: Ensures pods have a security context defined with proper restrictions
+expression: 'pods.items.all(item, has(item.spec.securityContext) && has(item.spec.securityContext.runAsNonRoot) && item.spec.securityContext.runAsNonRoot == true)'
+inputs:
+  - name: pods
+    kubernetes:
+      apiGroup: ""
+      version: v1
+      resourceType: pods
+      namespace: ""
+      name: ""
+severity: HIGH
+check_id: pod-security-context
+tags:
+  - security
+  - compliance
+  - pods
+category: pod-security
+extensions:
+  compliance_framework: CIS
+  control_id: "1.1.1"
+  remediation: "Ensure all pods have security context with runAsNonRoot set to true"

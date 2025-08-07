@@ -62,21 +62,9 @@ type MappingDefinition struct {
 
 // InlineCELRule represents an inline CEL rule definition
 type InlineCELRule struct {
-	ID         string     `yaml:"id"`
-	Expression string     `yaml:"expression"`
-	Inputs     []InputDef `yaml:"inputs"`
-}
-
-// InputDef represents an input definition
-type InputDef struct {
-	Name      string   `yaml:"name"`
-	Type      string   `yaml:"type"`
-	Resource  string   `yaml:"resource,omitempty"`
-	Path      string   `yaml:"path,omitempty"`
-	URL       string   `yaml:"url,omitempty"`
-	Command   string   `yaml:"command,omitempty"`
-	Args      []string `yaml:"args,omitempty"`
-	Namespace string   `yaml:"namespace,omitempty"`
+	ID         string             `yaml:"id"`
+	Expression string             `yaml:"expression"`
+	Inputs     []celscanner.Input `yaml:"inputs,omitempty"`
 }
 
 // ParameterDef represents a parameter definition
@@ -122,12 +110,6 @@ func (s *PluginServer) Configure(configMap map[string]string) error {
 func (s *PluginServer) Generate(oscalPolicy policy.Policy) error {
 	hclog.Default().Info("Generating CEL policies from OSCAL", "rulesets", len(oscalPolicy))
 
-	// Create policy directory
-	policyDir := filepath.Join(s.Config.Files.Workspace, pluginconfig.PluginDir, pluginconfig.PolicyDir)
-	if err := os.MkdirAll(policyDir, 0755); err != nil {
-		return fmt.Errorf("failed to create policy directory: %w", err)
-	}
-
 	// Load mapping configuration if available
 	mappingConfig, err := s.loadMappingConfig()
 	if err != nil {
@@ -156,18 +138,7 @@ func (s *PluginServer) Generate(oscalPolicy policy.Policy) error {
 		hclog.Default().Info("Generated CEL rules for RuleSet", "rule_id", ruleSet.Rule.ID, "cel_rules", len(rulesForSet))
 	}
 
-	// Save CEL rules to file
-	rulesFile := filepath.Join(policyDir, "cel-rules.yaml")
-	rulesData, err := yaml.Marshal(celRules)
-	if err != nil {
-		return fmt.Errorf("failed to marshal CEL rules: %w", err)
-	}
-
-	if err := os.WriteFile(rulesFile, rulesData, 0644); err != nil {
-		return fmt.Errorf("failed to write CEL rules: %w", err)
-	}
-
-	hclog.Default().Info("Generated CEL policies", "count", len(celRules), "file", rulesFile)
+	hclog.Default().Info("Generated CEL policies in rule store", "count", len(celRules))
 	return nil
 }
 
@@ -177,61 +148,43 @@ func (s *PluginServer) GetResults(oscalPolicy policy.Policy) (policy.PVPResult, 
 	ctx := context.Background()
 	pvpResult := policy.PVPResult{}
 	observations := []policy.ObservationByCheck{}
-
-	// Load CEL rules
-	rulesFile := filepath.Join(s.Config.Files.Workspace, pluginconfig.PluginDir, pluginconfig.PolicyDir, "cel-rules.yaml")
-	rulesBytes, err := os.ReadFile(rulesFile)
-	if err != nil {
-		return pvpResult, fmt.Errorf("failed to read CEL rules: %w", err)
+	ruleSetIDs := map[string]bool{}
+	for _, ruleSet := range oscalPolicy {
+		ruleSetIDs[ruleSet.Rule.ID] = true
 	}
 
-	// We need to unmarshal into a generic structure first since CelRule is an interface
-	var rulesData []map[string]interface{}
-	if err := yaml.Unmarshal(rulesBytes, &rulesData); err != nil {
-		return pvpResult, fmt.Errorf("failed to unmarshal CEL rules: %w", err)
-	}
-
-	// Convert to CelRule objects
+	// Convert stored rules to CEL rules
 	var celRules []celscanner.CelRule
-	for _, ruleData := range rulesData {
-		// For now, create simple rules from the data
-		// In practice, you'd need a proper deserialization method
-		id, _ := ruleData["id"].(string)
-		expr, _ := ruleData["celexpr"].(string)
+	// we should only get the rules that are in the mapping file
+	mappingConfig, err := s.loadMappingConfig()
+	if err != nil {
+		hclog.Default().Warn("Failed to load mapping config, using built-in mappings", "error", err)
+	}
 
-		if id != "" && expr != "" {
-			ruleBuilder := celscanner.NewRuleBuilder(id).
-				SetExpression(expr)
-
-			// Add inputs from the rule data
-			if inputs, ok := ruleData["ruleinputs"].([]interface{}); ok && len(inputs) > 0 {
-				for _, inputData := range inputs {
-					if input, ok := inputData.(map[string]interface{}); ok {
-						inputName, _ := input["inputname"].(string)
-						inputType, _ := input["inputtype"].(string)
-
-						if inputType == "kubernetes" {
-							if inputSpec, ok := input["inputspec"].(map[string]interface{}); ok {
-								group, _ := inputSpec["group"].(string)
-								version, _ := inputSpec["ver"].(string)
-								resourceType, _ := inputSpec["restype"].(string)
-								namespace, _ := inputSpec["ns"].(string)
-								resourceName, _ := inputSpec["resname"].(string)
-
-								ruleBuilder.WithKubernetesInput(inputName, group, version, resourceType, namespace, resourceName)
-							}
-						}
+	if mappingConfig != nil {
+		for _, mapping := range mappingConfig.Mappings {
+			if mapping.Type == "stored_rules" {
+				for _, ruleID := range mapping.RuleIDs {
+					if _, ok := ruleSetIDs[ruleID]; !ok {
+						continue
 					}
+					storedRule, err := s.ruleStore.Get(ruleID)
+					if err != nil {
+						hclog.Default().Error("failed to get stored rule", "rule_id", ruleID, "error", err)
+						continue
+					}
+					celRule, err := s.ruleStore.ConvertToCelRule(storedRule)
+					if err != nil {
+						hclog.Default().Error("failed to convert stored rule to CEL rule", "rule_id", storedRule.ID, "error", err)
+						continue
+					}
+					celRules = append(celRules, celRule)
 				}
-			}
-
-			if rule, err := ruleBuilder.Build(); err == nil {
-				celRules = append(celRules, rule)
-			} else {
-				hclog.Default().Warn("Failed to build rule", "id", id, "error", err)
 			}
 		}
 	}
+
+	hclog.Default().Debug("Converted stored rules to CEL rules", "count", len(celRules))
 
 	// Create scanner based on configuration
 	// For now, only support local scanner
@@ -251,8 +204,16 @@ func (s *PluginServer) GetResults(oscalPolicy policy.Policy) (policy.PVPResult, 
 
 	// Convert CEL results to PVP observations
 	for _, result := range results {
+		// Use the check_id from extensions if available, otherwise use the rule ID
+		checkID := result.ID
+		if result.Metadata.Extensions != nil {
+			if cid, ok := result.Metadata.Extensions["check_id"].(string); ok && cid != "" {
+				checkID = cid
+			}
+		}
+
 		observation := policy.ObservationByCheck{
-			CheckID:     result.ID,
+			CheckID:     checkID,
 			Title:       result.ID,
 			Description: fmt.Sprintf("CEL check result for %s", result.ID),
 			Methods:     []string{"AUTOMATED"},
@@ -273,9 +234,15 @@ func (s *PluginServer) GetResults(oscalPolicy policy.Policy) (policy.PVPResult, 
 		}
 
 		// Create subject for this observation
+		// Use "resource" as the subject type for C2P compatibility
+		subjectType := s.Config.Parameters.TargetType
+		if subjectType == "kubernetes-cluster" || s.Config.Features.KubernetesEnabled {
+			subjectType = "resource"
+		}
+
 		subject := policy.Subject{
 			Title:       s.Config.Parameters.TargetName,
-			Type:        s.Config.Parameters.TargetType,
+			Type:        subjectType,
 			ResourceID:  s.Config.Parameters.TargetID,
 			Result:      pvpResultStatus,
 			EvaluatedOn: time.Now(),
@@ -346,42 +313,6 @@ func (s *PluginServer) createRPCScanner() *celscanner.Scanner {
 	// For now, we'll use the local scanner as a placeholder
 	hclog.Default().Info("Using RPC-based scanner")
 	return s.createLocalScanner()
-}
-
-// mapCheckToExpression maps OSCAL check names to CEL expressions
-// This is a placeholder - in reality, this mapping would come from configuration
-func (s *PluginServer) mapCheckToExpression(checkName string) string {
-	// Example mappings
-	mappings := map[string]string{
-		"pod-security-context":  "has(resource.spec.securityContext)",
-		"resource-limits":       "resource.spec.containers.all(c, has(c.resources.limits))",
-		"privileged-containers": "!resource.spec.containers.exists(c, c.securityContext.privileged == true)",
-		// System service checks (limited to service status only)
-		"sshd-service-enabled": `service.success && contains(service.output, "enabled")`,
-		"sshd-service-running": `service.success && contains(service.output, "active")`,
-		"firewalld-enabled":    `service.success && contains(service.output, "enabled")`,
-		"firewalld-running":    `service.success && contains(service.output, "active")`,
-		"selinux-enforcing":    `selinux.success && contains(selinux.output, "Enforcing")`,
-	}
-
-	// Try to load custom mappings from file if specified
-	if s.Config.Files.MappingFile != "" {
-		customMappings, err := s.loadMappingsFromFile(s.Config.Files.MappingFile)
-		if err != nil {
-			hclog.Default().Warn("Failed to load custom mappings", "error", err)
-		} else {
-			// Merge custom mappings, overriding defaults
-			for k, v := range customMappings {
-				mappings[k] = v
-			}
-		}
-	}
-
-	if expr, ok := mappings[checkName]; ok {
-		return expr
-	}
-
-	return ""
 }
 
 // celLogger implements the celscanner.Logger interface
@@ -499,17 +430,17 @@ func (s *PluginServer) loadMappingConfig() (*MappingConfig, error) {
 		return nil, fmt.Errorf("no mapping file configured")
 	}
 
-	data, err := os.ReadFile(s.Config.Files.MappingFile)
+	customMappings, err := s.loadMappingsFromFile(filepath.Join(s.Config.Files.Workspace, s.Config.Files.MappingFile))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read mapping file: %w", err)
+		hclog.Default().Warn("Failed to load custom mappings", "error", err)
 	}
-
-	var config MappingConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal mapping config: %w", err)
-	}
-
-	return &config, nil
+	hclog.Default().Debug("customMappings", "customMappings", customMappings)
+	return &MappingConfig{
+		Version:    "1.0",
+		Mappings:   customMappings,
+		Parameters: make(map[string]ParameterDef),
+		Templates:  make(map[string]interface{}),
+	}, nil
 }
 
 // getCELRulesForRuleSet converts a RuleSet to CEL rules based on mapping configuration
@@ -539,18 +470,8 @@ func (s *PluginServer) getCELRulesForRuleSet(ruleSet extensions.RuleSet, mapping
 		}
 	}
 
-	// If no mapping found, fall back to built-in mappings
 	if len(celRules) == 0 {
-		for _, check := range ruleSet.Checks {
-			rule, err := s.createDefaultCELRule(ruleSet, check)
-			if err != nil {
-				hclog.Default().Warn("Failed to create default CEL rule", "check_id", check.ID, "error", err)
-				continue
-			}
-			if rule != nil {
-				celRules = append(celRules, rule)
-			}
-		}
+		hclog.Default().Warn("No CEL rules generated for RuleSet", "rule_id", ruleSet.Rule.ID)
 	}
 
 	return celRules, nil
@@ -612,18 +533,7 @@ func (s *PluginServer) createCELRuleFromInline(ruleSet extensions.RuleSet, inlin
 
 	// Add inputs
 	for _, input := range inline.Inputs {
-		switch input.Type {
-		case "kubernetes":
-			builder.WithKubernetesInput(input.Name, "", "v1", input.Resource, input.Namespace, "")
-		case "file":
-			builder.WithFileInput(input.Name, input.Path, ".", false, false)
-		case "http":
-			builder.WithHTTPInput(input.Name, input.URL, "GET", nil, nil)
-		case "system":
-			if input.Command != "" {
-				builder.WithSystemInput(input.Name, "", input.Command, input.Args)
-			}
-		}
+		builder.WithInput(input)
 	}
 
 	// Add RuleSet metadata
@@ -631,54 +541,6 @@ func (s *PluginServer) createCELRuleFromInline(ruleSet extensions.RuleSet, inlin
 	builder.WithExtension("ruleset_description", ruleSet.Rule.Description)
 
 	return builder.Build()
-}
-
-// createDefaultCELRule creates a CEL rule using built-in mappings
-func (s *PluginServer) createDefaultCELRule(ruleSet extensions.RuleSet, check extensions.Check) (celscanner.CelRule, error) {
-	expression := s.mapCheckToExpression(check.ID)
-	if expression == "" {
-		return nil, nil // No mapping found
-	}
-
-	builder := celscanner.NewRuleBuilder(check.ID).
-		SetExpression(expression).
-		WithName(check.ID).
-		WithDescription(check.Description)
-
-	// Add metadata
-	builder.WithExtension("oscal_rule_id", ruleSet.Rule.ID)
-	builder.WithExtension("check_id", check.ID)
-
-	// Add default inputs based on check type
-	if err := s.addDefaultInputs(builder, check.ID); err != nil {
-		return nil, err
-	}
-
-	return builder.Build()
-}
-
-// addDefaultInputs adds default inputs based on check ID patterns
-func (s *PluginServer) addDefaultInputs(builder *celscanner.RuleBuilder, checkID string) error {
-	if checkID == "pod-security-context" || checkID == "resource-limits" || checkID == "privileged-containers" {
-		builder.WithKubernetesInput("resource", "", "v1", "pods", "", "")
-	} else if strings.Contains(checkID, "service") || strings.Contains(checkID, "sshd") ||
-		strings.Contains(checkID, "firewalld") || strings.Contains(checkID, "selinux") {
-		// System service checks - use system input for service status
-		serviceName := extractServiceName(checkID)
-		if strings.Contains(checkID, "enabled") {
-			builder.WithSystemInput("service", "", "systemctl", []string{"is-enabled", serviceName})
-		} else if strings.Contains(checkID, "running") || strings.Contains(checkID, "active") {
-			builder.WithSystemInput("service", "", "systemctl", []string{"is-active", serviceName})
-		} else if strings.Contains(checkID, "selinux") {
-			builder.WithSystemInput("selinux", "", "getenforce", []string{})
-		} else {
-			builder.WithSystemInput("service", serviceName, "", []string{})
-		}
-	} else {
-		// Default to file input for unknown checks
-		builder.WithFileInput("resource", "*", ".", false, false)
-	}
-	return nil
 }
 
 // addRuleSetMetadata adds RuleSet metadata to a CEL rule
@@ -692,29 +554,18 @@ func (s *PluginServer) addRuleSetMetadata(rule celscanner.CelRule, ruleSet exten
 }
 
 // loadMappingsFromFile loads CEL expression mappings from a YAML or JSON file
-func (s *PluginServer) loadMappingsFromFile(mappingFile string) (map[string]string, error) {
+func (s *PluginServer) loadMappingsFromFile(mappingFile string) (map[string]MappingDefinition, error) {
 	data, err := os.ReadFile(mappingFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read mapping file: %w", err)
 	}
 
 	// Try to parse as YAML first (which also handles JSON)
-	var mappingData struct {
-		Mappings map[string]struct {
-			Expression  string                   `yaml:"expression" json:"expression"`
-			Description string                   `yaml:"description" json:"description"`
-			Inputs      []map[string]interface{} `yaml:"inputs" json:"inputs"`
-		} `yaml:"mappings" json:"mappings"`
-	}
+	var mappingData MappingConfig
 
 	if err := yaml.Unmarshal(data, &mappingData); err != nil {
 		return nil, fmt.Errorf("failed to parse mapping file: %w", err)
 	}
 
-	result := make(map[string]string)
-	for checkName, mapping := range mappingData.Mappings {
-		result[checkName] = mapping.Expression
-	}
-
-	return result, nil
+	return mappingData.Mappings, nil
 }

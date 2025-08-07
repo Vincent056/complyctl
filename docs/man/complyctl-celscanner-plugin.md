@@ -10,9 +10,7 @@ complyctl-celscanner-plugin - a plugin which extends the complyctl capabilities 
 
 The plugin is not meant to be executed directly, it communicates with complyctl via gRPC. It has configurable options that can be configured via a manifest file, complyctl processes the manifest file and sends the configuration values to the plugin.
 
-When the plugin receives the **generate** command from complyctl, it will convert OSCAL rules from the assessment plan into CEL expressions and generate rule files in YAML format. The generated files are placed in the **celscanner** directory under user workspace.
-
-When the plugin receives the **scan** command from complyctl, it will evaluate the CEL rules against the target environment using multiple input sources (Kubernetes, filesystem, HTTP, system) and return the observations to complyctl based on CEL evaluation results.
+When the plugin receives the **scan** command from complyctl, it loads CEL rules from YAML files in the rules directory, maps OSCAL Rule/Check IDs to these rules using a mapping configuration, evaluates the CEL rules against the target environment using multiple input sources (Kubernetes, filesystem, HTTP, system), and returns the observations to complyctl based on CEL evaluation results.
 
 The plugin supports both local evaluation and remote evaluation via CEL RPC Server. For security reasons, system command execution is limited to service status checks only.
 
@@ -24,8 +22,11 @@ Default plugin binary location.
 **/etc/complytime/config.d/c2p-celscanner-manifest.json**
 Optional drop-in manifest file with customized plugin configurations.
 
-**~/complytime/celscanner/policy/cel-rules.yaml**
-Generated CEL rules file (assuming default workspace).
+**~/complytime/rules/**
+Directory containing CEL rule definitions in YAML format.
+
+**~/complytime/mappings.yaml**
+Mapping configuration file that links OSCAL Rule/Check IDs to CEL rules.
 
 **~/complytime/celscanner/results/cel-results.yaml**
 Scan results file (assuming default workspace).
@@ -33,8 +34,8 @@ Scan results file (assuming default workspace).
 # FEATURES
 
 **Input Sources:**
-- Kubernetes: Query and validate Kubernetes resources
-- Filesystem: Check file contents and properties
+- Kubernetes: Query and validate Kubernetes resources (pods, deployments, services, etc.)
+- Filesystem: Check file contents, permissions, and properties
 - HTTP: Make API calls for validation
 - System: Limited to service status checks only (systemctl, getenforce) for security
 
@@ -66,19 +67,15 @@ plugins:
       mapping_file: mappings.yaml
 EOF
 
-Step 2: Generate CEL rules from the assessment plan
-
-$ complyctl generate -m manifest.yaml
-
-This creates CEL rules in ~/complytime/celscanner/policy/cel-rules.yaml.
-
-Step 3: Scan the environment with the generated rules
+Step 2: Scan the environment with the rules
 
 $ complyctl scan -m manifest.yaml
 
+This loads CEL rules from the rule store based on the mapping configuration and evaluates them.
+
 The scan results are saved to ~/complytime/celscanner/results/cel-results.yaml.
 
-Step 4: Generate a compliance report
+Step 3: Generate a compliance report
 
 $ complyctl report -m manifest.yaml
 
@@ -89,23 +86,27 @@ The plugin uses a flexible mapping system to convert OSCAL rules to CEL expressi
 $ cat > mappings.yaml <<EOF
 version: "1.0"
 mappings:
-  # Map to stored rules
+  # Map OSCAL Rule/Check IDs to stored rules
+  pod-security-context:
+    type: stored_rules
+    rule_ids:
+      - pod-security-context
+      
+  namespace-network-policy-compliance:
+    type: stored_rules
+    rule_ids:
+      - namespace-network-policy-compliance
+  
+  kubeconfig-file-permissions:
+    type: stored_rules
+    rule_ids:
+      - kubeconfig-file-permissions
+      
   sshd-service:
     type: stored_rules
     rule_ids:
       - sshd-service-enabled
       - sshd-service-running
-  
-  # Map to inline rules
-  pod-security:
-    type: inline
-    rules:
-      - id: pod-security-context
-        expression: "has(resource.spec.securityContext)"
-        inputs:
-          - name: resource
-            type: kubernetes
-            resource: pods
 EOF
 
 # SYSTEM CHECKS
